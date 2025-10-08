@@ -39,7 +39,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('📄 [gs-list-sheets] Starting...');
+    console.log('📄 [gs-list-sheets] Request received');
+    console.log('📝 Request method:', req.method);
+    console.log('🔗 Request URL:', req.url);
 
     // Parse helpers
     const url = new URL(req.url);
@@ -80,6 +82,7 @@ Deno.serve(async (req) => {
     spreadsheet_id = possibleSpreadsheetIds[0] as string | undefined;
 
     console.log('📊 Spreadsheet ID resolved:', spreadsheet_id);
+    console.log('👤 monday_user_id:', monday_user_id);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -103,7 +106,8 @@ Deno.serve(async (req) => {
     }
 
     if (!spreadsheet_id) {
-      throw new Error('spreadsheet_id is required');
+      console.error('❌ spreadsheet_id is required');
+      return new Response(JSON.stringify({ error: 'spreadsheet_id is required', options: [] }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Fetch Google Sheets credentials for this Monday user
@@ -116,7 +120,7 @@ Deno.serve(async (req) => {
 
     if (profileError || !profile?.google_sheets_credentials) {
       console.error('❌ No credentials found:', profileError);
-      throw new Error('Google Sheets not connected. Please connect your Google account first.');
+      return new Response(JSON.stringify({ error: 'Google Sheets not connected. Please connect your Google account first.', options: [] }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const credentials = profile.google_sheets_credentials as GoogleSheetsCredentials;
@@ -175,17 +179,20 @@ Deno.serve(async (req) => {
     }
 
     const data = await response.json();
-    const sheets = (data.sheets || []).map((sheet: any) => ({
+    console.log('📄 Raw response from Google:', { sheetsCount: data.sheets?.length });
+    
+    const sheetsData = data.sheets || [];
+    const sheets = Array.isArray(sheetsData) ? sheetsData.map((sheet: any) => ({
       id: String(sheet.properties.sheetId),
       name: sheet.properties.title,
       title: sheet.properties.title,
       value: String(sheet.properties.sheetId),
-    }));
+    })) : [];
 
-    console.log(`✅ Found ${sheets.length} sheets`);
+    console.log(`✅ Returning ${sheets.length} sheets`);
     return new Response(JSON.stringify({ sheets, options: sheets }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error('💥 Error:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    console.error('💥 Fatal error:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Internal server error', options: [] }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

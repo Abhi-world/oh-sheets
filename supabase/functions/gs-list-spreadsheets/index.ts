@@ -39,7 +39,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('📋 [gs-list-spreadsheets] Starting...');
+    console.log('📋 [gs-list-spreadsheets] Request received');
+    console.log('📝 Request method:', req.method);
+    console.log('🔗 Request URL:', req.url);
 
     // Parse helpers
     const url = new URL(req.url);
@@ -53,7 +55,9 @@ Deno.serve(async (req) => {
 
     // Extract from headers/params/body (no JWT verification required)
     const headerUser = req.headers.get('x-monday-user-id') || req.headers.get('X-Monday-User-Id') || undefined;
-    monday_user_id = headerUser || body.monday_user_id || params.get('monday_user_id') || params.get('user_id') || undefined;
+    monday_user_id = headerUser || body.monday_user_id || body.payload?.userId || params.get('monday_user_id') || params.get('user_id') || undefined;
+    
+    console.log('👤 monday_user_id:', monday_user_id);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -86,7 +90,7 @@ Deno.serve(async (req) => {
 
     if (profileError || !profile?.google_sheets_credentials) {
       console.error('❌ No credentials found:', profileError);
-      throw new Error('Google Sheets not connected. Please connect your Google account first.');
+      return new Response(JSON.stringify({ error: 'Google Sheets not connected.', options: [] }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const credentials = profile.google_sheets_credentials as GoogleSheetsCredentials;
@@ -149,17 +153,20 @@ Deno.serve(async (req) => {
     }
 
     const data = await response.json();
-    const spreadsheets = (data.files || []).map((file: any) => ({
+    console.log('📄 Raw response from Google:', { filesCount: data.files?.length });
+    
+    const files = data.files || [];
+    const spreadsheets = Array.isArray(files) ? files.map((file: any) => ({
       id: file.id,
       name: file.name,
       title: file.name,
       value: file.id,
-    }));
+    })) : [];
 
-    console.log(`✅ Found ${spreadsheets.length} spreadsheets`);
+    console.log(`✅ Returning ${spreadsheets.length} spreadsheets`);
     return new Response(JSON.stringify({ spreadsheets, options: spreadsheets }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error('💥 Error:', error);
-    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    console.error('💥 Fatal error:', error);
+    return new Response(JSON.stringify({ error: error.message || 'Internal server error', options: [] }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
