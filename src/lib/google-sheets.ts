@@ -105,8 +105,9 @@ export async function fetchSpreadsheets() {
       throw new Error('No access token available');
     }
 
+    // Updated to include more fields and sorting
     const response = await fetch(
-      'https://www.googleapis.com/drive/v3/files?q=mimeType=\'application/vnd.google-apps.spreadsheet\'', 
+      'https://www.googleapis.com/drive/v3/files?q=mimeType=\'application/vnd.google-apps.spreadsheet\'&fields=files(id,name,createdTime,modifiedTime)&orderBy=modifiedTime desc', 
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,

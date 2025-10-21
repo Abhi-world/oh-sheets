@@ -23,29 +23,38 @@ export function GoogleSheetsConnect() {
       const hasStoredCredentials = await googleSheetsService.initializeWithStoredCredentials();
       
       if (hasStoredCredentials) {
-        // Verify the connection by attempting to fetch spreadsheets
+        // Verify the connection by attempting to fetch spreadsheets and drive files
         try {
-          const response = await fetch('https://www.googleapis.com/drive/v3/files?q=mimeType=\'application/vnd.google-apps.spreadsheet\'', {
+          // Check Google Sheets access
+          const sheetsResponse = await fetch('https://sheets.googleapis.com/v4/spreadsheets?fields=spreadsheetId', {
             headers: {
               'Authorization': `Bearer ${await googleSheetsService.getAccessToken()}`,
               'Accept': 'application/json',
             },
           });
           
-          if (!response.ok) {
-            throw new Error(`Google API error: ${response.status} ${response.statusText}`);
+          // Check Google Drive access
+          const driveResponse = await fetch('https://www.googleapis.com/drive/v3/files?q=mimeType=\'application/vnd.google-apps.spreadsheet\'&fields=files(id,name)&pageSize=1', {
+            headers: {
+              'Authorization': `Bearer ${await googleSheetsService.getAccessToken()}`,
+              'Accept': 'application/json',
+            },
+          });
+          
+          if (!sheetsResponse.ok || !driveResponse.ok) {
+            throw new Error(`Google API error: Sheets ${sheetsResponse.status}, Drive ${driveResponse.status}`);
           }
           
-          console.log('Successfully verified Google Sheets connection');
+          console.log('Successfully verified Google Sheets and Drive connection');
           setIsConnected(true);
         } catch (verifyError) {
-          console.error('Error verifying Google Sheets connection:', verifyError);
+          console.error('Error verifying Google connection:', verifyError);
           // If verification fails, we need to reconnect
           setIsConnected(false);
-          setConnectionError('Your Google Sheets connection needs to be refreshed. Please reconnect.');
+          setConnectionError('Your Google connection needs to be refreshed. Please reconnect.');
           toast({
             title: 'Connection Issue',
-            description: 'Your Google Sheets connection needs to be refreshed. Please reconnect.',
+            description: 'Your Google Sheets and Drive connection needs to be refreshed. Please reconnect.',
             variant: 'destructive'
           });
         }
@@ -53,9 +62,9 @@ export function GoogleSheetsConnect() {
         setIsConnected(false);
       }
     } catch (error) {
-      console.error('Error checking Google Sheets connection:', error);
+      console.error('Error checking Google connection:', error);
       setIsConnected(false);
-      setConnectionError('Failed to check Google Sheets connection. Please try again.');
+      setConnectionError('Failed to check Google connection. Please try again.');
     }
   }
 
@@ -64,7 +73,43 @@ export function GoogleSheetsConnect() {
       setIsConnecting(true);
       setConnectionError(null);
       const authUrl = googleSheetsService.getAuthUrl();
-      window.location.href = authUrl;
+      
+      // Open popup for authentication instead of redirecting
+      const popup = window.open(
+        authUrl,
+        'Google Sheets Authorization',
+        'width=800,height=600,menubar=no,toolbar=no,location=no,status=no'
+      );
+      
+      // Set up message listener for the OAuth callback
+      window.addEventListener('message', async (event) => {
+        // Verify origin for security
+        if (event.data && event.data.type === 'GOOGLE_AUTH_CALLBACK') {
+          const { code } = event.data;
+          
+          try {
+            await googleSheetsService.handleAuthCallback(code);
+            setIsConnected(true);
+            toast({
+              title: 'Connection Successful',
+              description: 'Successfully connected to Google Sheets and Drive.',
+            });
+            
+            if (popup) {
+              popup.close();
+            }
+          } catch (callbackError) {
+            console.error('Error handling auth callback:', callbackError);
+            setConnectionError('Failed to complete authentication. Please try again.');
+            toast({
+              title: 'Authentication Error',
+              description: 'Failed to complete Google authentication. Please try again.',
+              variant: 'destructive'
+            });
+          }
+        }
+      }, { once: true });
+      
     } catch (error) {
       console.error('Error connecting to Google Sheets:', error);
       setConnectionError('Failed to connect to Google Sheets. Please try again.');

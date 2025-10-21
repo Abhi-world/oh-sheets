@@ -2,7 +2,10 @@ import { GoogleAuth } from 'google-auth-library';
 import { google } from 'googleapis';
 import { supabase } from '@/integrations/supabase/client';
 
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
+const SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/drive.readonly'
+];
 
 interface GoogleSheetsConfig {
   clientId: string;
@@ -21,14 +24,20 @@ class GoogleSheetsService {
   }
 
   private initializeClient() {
+    // Update redirect URI to use the new callback page
+    const redirectUri = `${window.location.origin}/google-auth-callback`;
+    
     const oauth2Client = new google.auth.OAuth2(
       this.config.clientId,
       this.config.clientSecret,
-      this.config.redirectUri
+      redirectUri
     );
 
     this.auth = oauth2Client;
     this.sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+    
+    // Initialize Drive API
+    google.drive({ version: 'v3', auth: oauth2Client });
   }
 
   /**
